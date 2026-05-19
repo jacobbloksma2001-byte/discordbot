@@ -53,6 +53,18 @@ const activityMessageCache = new Map();
 let activityIntervalsStarted = false;
 let weeklyResetTimeout = null;
 
+// ─── Afwezigheid panel caches ────────────────────────────────────────────────
+const afwezigheidPublicMessageCache = new Map();   // guildId → messageId
+const afwezigheidOverviewMessageCache = new Map(); // guildId → messageId
+const afwezigheidUpdateQueue = new Map();          // guildId → timeout
+
+// ─── Ticket panel cache ──────────────────────────────────────────────────────
+const ticketPanelMessageCache = new Map(); // guildId → messageId
+
+// ─── Server stats cache ──────────────────────────────────────────────────────
+const serverStatsChannelCache = new Map(); // key → channelId
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function createBaseEmbed({
   title,
@@ -362,6 +374,346 @@ function startMemberListLoop() {
   }, config.MEMBER_LIST_UPDATE_INTERVAL_MS || 1800000);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AFWEZIGHEID FUNCTIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function buildAfwezigheidPublicEmbed(guild) {
+  const settings = config.AFWEZIGHEID_SETTINGS || {};
+  const [rows] = await pool.execute(
+    `SELECT * FROM afwezigheden WHERE guild_id = ? AND status IN ('planned','active') ORDER BY start_at ASC`,
+    [guild.id]
+  ).catch(() => [[], null]);
+
+  if (!rows.length) {
+    return createBaseEmbed({
+      title: '✦ Afwezigheidsoverzicht ✦',
+      description: 'Er zijn momenteel geen geplande of actieve afwezigheden.',
+      image: false
+    });
+  }
+
+  const lines = rows.map(row => {
+    const from = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.start_at));
+    const to   = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.end_at));
+    const statusIcon = row.status === 'active' ? '🟢' : '🕐';
+    return `${statusIcon} <@${row.user_id}> — **${row.type}** | ${from} → ${to}`;
+  });
+
+  return createBaseEmbed({
+    title: '✦ Afwezigheidsoverzicht ✦',
+    description: lines.join('\n').slice(0, 4096),
+    image: false
+  });
+}
+
+async function refreshAfwezigheidPublicPanel(guild, reason = '') {
+  if (!guild) return;
+  const settings = config.AFWEZIGHEID_SETTINGS || {};
+  if (!settings.PUBLIC_CHANNEL_ID) return;
+
+  try {
+    const channel = await fetchTextChannel(settings.PUBLIC_CHANNEL_ID);
+    if (!channel) return;
+
+    const embed = await buildAfwezigheidPublicEmbed(guild);
+    const cachedId = afwezigheidPublicMessageCache.get(guild.id);
+
+    if (cachedId) {
+      try {
+        const msg = await channel.messages.fetch(cachedId);
+        await msg.edit({ embeds: [embed] });
+        return;
+      } catch {
+        afwezigheidPublicMessageCache.delete(guild.id);
+      }
+    }
+
+    // Zoek bestaand botbericht
+    const messages = await channel.messages.fetch({ limit: 20 });
+    const existing = messages.find(
+      m => m.author.id === client.user.id && m.embeds.length > 0 &&
+           m.embeds[0].title && m.embeds[0].title.includes('Afwezigheidsoverzicht')
+    );
+
+    if (existing) {
+      afwezigheidPublicMessageCache.set(guild.id, existing.id);
+      await existing.edit({ embeds: [embed] });
+    } else {
+      const newMsg = await channel.send({ embeds: [embed] });
+      afwezigheidPublicMessageCache.set(guild.id, newMsg.id);
+    }
+  } catch (error) {
+    console.error('refreshAfwezigheidPublicPanel fout:', error.message);
+  }
+}
+
+// Alias voor backwards-compat (was ook als refreshAfwezigPublicPanel in context)
+async function refreshAfwezigPublicPanel(guild, reason = '') {
+  return refreshAfwezigheidPublicPanel(guild, reason);
+}
+
+async function buildAfwezigheidOverviewEmbed(guild) {
+  const [rows] = await pool.execute(
+    `SELECT * FROM afwezigheden WHERE guild_id = ? ORDER BY created_at DESC LIMIT 50`,
+    [guild.id]
+  ).catch(() => [[], null]);
+
+  if (!rows.length) {
+    return createBaseEmbed({
+      title: '✦ Afwezigheid — Volledig Overzicht ✦',
+      description: 'Geen afwezigheidsrecords gevonden.',
+      image: false
+    });
+  }
+
+  const statusLabel = { planned: '🕐 Gepland', active: '🟢 Actief', ended: '✅ Beëindigd', cancelled: '❌ Geannuleerd' };
+  const lines = rows.map(row => {
+    const from = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(row.start_at));
+    const to   = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(row.end_at));
+    return `${statusLabel[row.status] || row.status} <@${row.user_id}> | ${row.type} | ${from} → ${to}`;
+  });
+
+  return createBaseEmbed({
+    title: '✦ Afwezigheid — Volledig Overzicht ✦',
+    description: lines.join('\n').slice(0, 4096),
+    image: false
+  });
+}
+
+async function refreshAfwezigheidOverviewPanel(guild, reason = '') {
+  if (!guild) return;
+  const settings = config.AFWEZIGHEID_SETTINGS || {};
+  if (!settings.OVERVIEW_CHANNEL_ID) return;
+
+  try {
+    const channel = await fetchTextChannel(settings.OVERVIEW_CHANNEL_ID);
+    if (!channel) return;
+
+    const embed = await buildAfwezigheidOverviewEmbed(guild);
+    const cachedId = afwezigheidOverviewMessageCache.get(guild.id);
+
+    if (cachedId) {
+      try {
+        const msg = await channel.messages.fetch(cachedId);
+        await msg.edit({ embeds: [embed] });
+        return;
+      } catch {
+        afwezigheidOverviewMessageCache.delete(guild.id);
+      }
+    }
+
+    const messages = await channel.messages.fetch({ limit: 20 });
+    const existing = messages.find(
+      m => m.author.id === client.user.id && m.embeds.length > 0 &&
+           m.embeds[0].title && m.embeds[0].title.includes('Volledig Overzicht')
+    );
+
+    if (existing) {
+      afwezigheidOverviewMessageCache.set(guild.id, existing.id);
+      await existing.edit({ embeds: [embed] });
+    } else {
+      const newMsg = await channel.send({ embeds: [embed] });
+      afwezigheidOverviewMessageCache.set(guild.id, newMsg.id);
+    }
+  } catch (error) {
+    console.error('refreshAfwezigheidOverviewPanel fout:', error.message);
+  }
+}
+
+function queueAfwezigheidUpdate(guild, reason = '', delay = 3000) {
+  if (!guild) return;
+  const existing = afwezigheidUpdateQueue.get(guild.id);
+  if (existing) clearTimeout(existing);
+  const timeout = setTimeout(async () => {
+    afwezigheidUpdateQueue.delete(guild.id);
+    await refreshAfwezigheidPublicPanel(guild, reason).catch(() => null);
+    await refreshAfwezigheidOverviewPanel(guild, reason).catch(() => null);
+  }, delay);
+  afwezigheidUpdateQueue.set(guild.id, timeout);
+}
+
+async function updateAfwezigheidPanels(guild, reason = '') {
+  await refreshAfwezigheidPublicPanel(guild, reason).catch(() => null);
+  await refreshAfwezigheidOverviewPanel(guild, reason).catch(() => null);
+}
+
+async function processAfwezigheden(guild) {
+  if (!guild) return;
+  const settings = config.AFWEZIGHEID_SETTINGS || {};
+  const now = new Date();
+
+  try {
+    // Activeer geplande afwezigheden waarvan starttijd verstreken is
+    const [toActivate] = await pool.execute(
+      `SELECT * FROM afwezigheden WHERE guild_id = ? AND status = 'planned' AND start_at <= ?`,
+      [guild.id, now.toISOString().slice(0, 19).replace('T', ' ')]
+    );
+
+    for (const row of toActivate) {
+      await pool.execute(
+        `UPDATE afwezigheden SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [row.id]
+      );
+
+      const member = await guild.members.fetch(row.user_id).catch(() => null);
+      if (member) {
+        // Afwezig-rol geven
+        if (settings.AFWEZIG_ROLE_ID) {
+          const botMember = guild.members.me;
+          const role = guild.roles.cache.get(settings.AFWEZIG_ROLE_ID);
+          if (role && botMember && role.position < botMember.roles.highest.position) {
+            await member.roles.add(role.id, 'Afwezigheid gestart').catch(() => null);
+          }
+        }
+        // Nickname prefix zetten
+        if (settings.NICKNAME_PREFIX) {
+          const botMember = guild.members.me;
+          if (botMember && botMember.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
+            const current = member.displayName || '';
+            if (!current.startsWith(settings.NICKNAME_PREFIX)) {
+              await member.setNickname(`${settings.NICKNAME_PREFIX}${current}`.slice(0, 32), 'Afwezigheid gestart').catch(() => null);
+            }
+          }
+        }
+      }
+    }
+
+    // Beëindig afwezigheden waarvan eindtijd verstreken is
+    const [toEnd] = await pool.execute(
+      `SELECT * FROM afwezigheden WHERE guild_id = ? AND status IN ('planned','active') AND end_at <= ?`,
+      [guild.id, now.toISOString().slice(0, 19).replace('T', ' ')]
+    );
+
+    for (const row of toEnd) {
+      await pool.execute(
+        `UPDATE afwezigheden SET status = 'ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [row.id]
+      );
+
+      const member = await guild.members.fetch(row.user_id).catch(() => null);
+      if (member) {
+        if (settings.AFWEZIG_ROLE_ID) {
+          const botMember = guild.members.me;
+          const role = guild.roles.cache.get(settings.AFWEZIG_ROLE_ID);
+          if (role && botMember && role.position < botMember.roles.highest.position) {
+            await member.roles.remove(role.id, 'Afwezigheid beëindigd').catch(() => null);
+          }
+        }
+        if (settings.NICKNAME_PREFIX && row.original_display_name !== undefined) {
+          const botMember = guild.members.me;
+          if (botMember && botMember.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
+            await member.setNickname(row.original_display_name || null, 'Afwezigheid beëindigd').catch(() => null);
+          }
+        }
+      }
+    }
+
+    if (toActivate.length > 0 || toEnd.length > 0) {
+      await refreshAfwezigheidPublicPanel(guild, 'Afwezigheid verwerkt');
+      await refreshAfwezigheidOverviewPanel(guild, 'Afwezigheid verwerkt');
+    }
+  } catch (error) {
+    console.error('processAfwezigheden fout:', error.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TICKET PANEL FUNCTIE
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function refreshTicketPanel(guild) {
+  if (!guild) return;
+  const settings = config.TICKET_SETTINGS || {};
+  if (!settings.PANEL_CHANNEL_ID) return;
+
+  try {
+    const channel = await fetchTextChannel(settings.PANEL_CHANNEL_ID);
+    if (!channel) return;
+
+    // Delegeer naar het ticket-command zelf als het die functie heeft
+    const ticketCmd = client.commands.get('ticket');
+    if (ticketCmd && typeof ticketCmd.refreshPanel === 'function') {
+      await ticketCmd.refreshPanel(channel, { config, client, createBaseEmbed, bannerPath, pool });
+    }
+  } catch (error) {
+    console.error('refreshTicketPanel fout:', error.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVER STATS FUNCTIE
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function updateServerStats(guild, reason = '') {
+  if (!guild) return;
+  const statsConfig = config.SERVER_STATS;
+  if (!statsConfig || !statsConfig.ENABLED) return;
+
+  try {
+    const channels = statsConfig.CHANNELS || {};
+
+    // Leden teller
+    if (channels.members) {
+      const memberCount = guild.memberCount;
+      const name = channels.members.replace('{count}', memberCount);
+      const cacheKey = `${guild.id}:members`;
+      const channelId = serverStatsChannelCache.get(cacheKey);
+      const target = channelId
+        ? guild.channels.cache.get(channelId)
+        : guild.channels.cache.find(c => c.name.startsWith('』Leden') || c.name.startsWith('『🫂'));
+      if (target) {
+        serverStatsChannelCache.set(cacheKey, target.id);
+        if (target.name !== name) await target.setName(name).catch(() => null);
+      }
+    }
+
+    // Boost level
+    if (channels.boostLevel) {
+      const level = guild.premiumTier;
+      const name = channels.boostLevel.replace('{count}', level);
+      const cacheKey = `${guild.id}:boost`;
+      const channelId = serverStatsChannelCache.get(cacheKey);
+      const target = channelId
+        ? guild.channels.cache.get(channelId)
+        : guild.channels.cache.find(c => c.name.startsWith('』Boost') || c.name.startsWith('『🚀'));
+      if (target) {
+        serverStatsChannelCache.set(cacheKey, target.id);
+        if (target.name !== name) await target.setName(name).catch(() => null);
+      }
+    }
+
+    // Tickets teller
+    if (channels.tickets) {
+      const [openRows] = await pool.execute(
+        `SELECT COUNT(*) as cnt FROM tickets WHERE guild_id = ? AND status = 'open'`,
+        [guild.id]
+      ).catch(() => [[{ cnt: 0 }]]);
+      const [closedRows] = await pool.execute(
+        `SELECT COUNT(*) as cnt FROM tickets WHERE guild_id = ? AND status = 'closed'`,
+        [guild.id]
+      ).catch(() => [[{ cnt: 0 }]]);
+      const open = openRows[0]?.cnt || 0;
+      const closed = closedRows[0]?.cnt || 0;
+      const name = channels.tickets.replace('{open}', open).replace('{closed}', closed);
+      const cacheKey = `${guild.id}:tickets`;
+      const channelId = serverStatsChannelCache.get(cacheKey);
+      const target = channelId
+        ? guild.channels.cache.get(channelId)
+        : guild.channels.cache.find(c => c.name.startsWith('』Tickets') || c.name.startsWith('『🎟️'));
+      if (target) {
+        serverStatsChannelCache.set(cacheKey, target.id);
+        if (target.name !== name) await target.setName(name).catch(() => null);
+      }
+    }
+  } catch (error) {
+    console.error('updateServerStats fout:', error.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVITY FUNCTIES
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function upsertActivityPanelRecord(guildId, patch = {}) {
   const keys = Object.keys(patch);
@@ -574,8 +926,67 @@ function startActivityIntervals(guild) {
     runActivityCheckCycle(guild).catch(error => console.error('runActivityCheckCycle fout:', error));
   }, 2 * 60 * 1000);
 
+  // Verwerk afwezigheden elke minuut
+  setInterval(() => {
+    processAfwezigheden(guild).catch(error => console.error('processAfwezigheden fout:', error));
+  }, config.AFWEZIGHEID_SETTINGS?.CHECK_INTERVAL_MS || 60 * 1000);
+
   scheduleWeeklyActivityReset(guild).catch(() => null);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANTI-LINK SYSTEEM (messageCreate)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const spamMap = new Map();
+
+function hasLink(content) {
+  return /https?:\/\/\S+/i.test(content) || /discord\.gg\/\S+/i.test(content);
+}
+
+function isMassMention(message) {
+  return (
+    message.mentions.users.size + message.mentions.roles.size >= 4 ||
+    message.content.includes('@everyone') ||
+    message.content.includes('@here')
+  );
+}
+
+function isSpam(message) {
+  const now = Date.now();
+  const arr = spamMap.get(message.author.id) || [];
+  const recent = arr.filter(ts => now - ts < 5000);
+  recent.push(now);
+  spamMap.set(message.author.id, recent);
+  return recent.length >= 5;
+}
+
+function hasBypassRole(member) {
+  const antiLink = config.ANTI_LINK || {};
+  if (!antiLink.ENABLED) return true;
+  const bypassIds = Array.isArray(antiLink.BYPASS_ROLE_IDS) ? antiLink.BYPASS_ROLE_IDS : [];
+  return bypassIds.some(id => member.roles.cache.has(id));
+}
+
+function isAllowedUrl(url) {
+  const antiLink = config.ANTI_LINK || {};
+  const allowed = Array.isArray(antiLink.ALLOWED_DOMAINS) ? antiLink.ALLOWED_DOMAINS : [];
+  const whitelisted = Array.isArray(antiLink.WHITELISTED_URLS) ? antiLink.WHITELISTED_URLS : [];
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (allowed.some(d => d.replace(/^www\./, '') === host)) return true;
+    if (whitelisted.some(w => parsed.href.includes(w))) return true;
+  } catch {
+    // ongeldige URL, blokkeer niet
+    return true;
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DISCORD EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 client.once(Events.ClientReady, async readyClient => {
   console.log(`Ingelogd als ${readyClient.user.tag}`);
@@ -613,11 +1024,38 @@ client.once(Events.ClientReady, async readyClient => {
     );
   }
 
+  // Server stats updaten bij start
+  for (const guild of readyClient.guilds.cache.values()) {
+    updateServerStats(guild, 'Bot opgestart').catch(() => null);
+  }
+
   startMemberListLoop();
+
+  // Server stats interval
+  const statsInterval = config.SERVER_STATS?.UPDATE_INTERVAL_MS || 5 * 60 * 1000;
+  setInterval(() => {
+    for (const guild of client.guilds.cache.values()) {
+      updateServerStats(guild, 'Interval update').catch(() => null);
+    }
+  }, statsInterval);
 });
 
 client.on('guildMemberAdd', async member => {
   const count = member.guild.memberCount;
+
+  // Anti-alt check
+  if (config.ANTI_ALT_ENABLED) {
+    const accountAgeMs = Date.now() - member.user.createdTimestamp;
+    const accountAgeDays = Math.floor(accountAgeMs / 86400000);
+    if (accountAgeDays < 7) {
+      if (config.ANTI_ALT_ROLE_ID) {
+        await member.roles.add(config.ANTI_ALT_ROLE_ID).catch(() => null);
+      }
+      await sendBotLog('✦ Anti-alt detectie', `${member.user.tag} heeft een jong account (${accountAgeDays} dagen oud).`, [
+        { name: 'Account leeftijd', value: `${accountAgeDays} dagen`, inline: true }
+      ]);
+    }
+  }
 
   await applyAutoRole(member);
   await upsertMemberCache(member);
@@ -664,6 +1102,7 @@ client.on('guildMemberAdd', async member => {
   );
 
   queueMemberListUpdate(member.guild, 'Nieuw lid gejoint');
+  updateServerStats(member.guild, 'Lid gejoint').catch(() => null);
 });
 
 client.on('guildMemberRemove', async member => {
@@ -706,6 +1145,7 @@ client.on('guildMemberRemove', async member => {
   }
 
   queueMemberListUpdate(member.guild, 'Lid verwijderd of vertrokken');
+  updateServerStats(member.guild, 'Lid verlaten').catch(() => null);
 });
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
@@ -826,18 +1266,63 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 client.on('messageCreate', async message => {
   if (!message.guild || !message.author || message.author.bot) return;
 
-  if (/https?:\/\/\S+/i.test(message.content)) {
+  const antiLink = config.ANTI_LINK || {};
+
+  if (antiLink.ENABLED && hasLink(message.content)) {
+    if (!hasBypassRole(message.member)) {
+      const urls = (message.content.match(/https?:\/\/\S+/gi) || []).concat(
+        (message.content.match(/discord\.gg\/\S+/gi) || []).map(u => `https://${u}`)
+      );
+      const hasBlockedUrl = urls.some(u => !isAllowedUrl(u));
+      if (hasBlockedUrl) {
+        await message.delete().catch(() => null);
+        await sendLog(
+          config.LOG_CHANNELS?.linkDelete,
+          createLogEmbed({
+            title: '✦ 𝑳𝒊𝒏𝒌 𝒈𝒆𝒃𝒍𝒐𝒌𝒌𝒆𝒆𝒓𝒅',
+            description: `${message.author.tag} plaatste een geblokkeerde link in ${message.channel}.`,
+            fields: [
+              { name: 'Auteur', value: message.author.tag, inline: true },
+              { name: 'Kanaal', value: `${message.channel}`, inline: true },
+              { name: 'Inhoud', value: message.content.slice(0, 1024), inline: false }
+            ]
+          })
+        );
+        return;
+      }
+    }
+    // Toegestane link: alleen loggen
     await sendLog(
       config.LOG_CHANNELS?.linkDelete,
       createLogEmbed({
         title: '✦ 𝑳𝒊𝒏𝒌 𝒈𝒆𝒅𝒆𝒕𝒆𝒄𝒕𝒆𝒆𝒓𝒅',
-        description: `Er is een bericht met een link geplaatst in ${message.channel}.`,
+        description: `${message.author.tag} plaatste een (toegestane) link in ${message.channel}.`,
         fields: [
           { name: 'Auteur', value: message.author.tag, inline: true },
           { name: 'Inhoud', value: message.content.slice(0, 1024), inline: false }
         ]
       })
     );
+    return;
+  }
+
+  // Anti mass-mention
+  if (config.ANTI_TAG_ENABLED && isMassMention(message)) {
+    await message.delete().catch(() => null);
+    await sendBotLog('✦ Mass mention geblokkeerd', `${message.author.tag} tagde te veel leden.`, [
+      { name: 'Kanaal', value: `${message.channel}`, inline: true },
+      { name: 'Inhoud', value: message.content.slice(0, 1024), inline: false }
+    ]);
+    return;
+  }
+
+  // Anti spam
+  if (config.ANTI_SPAM_ENABLED && isSpam(message)) {
+    await message.delete().catch(() => null);
+    await sendBotLog('✦ Spam geblokkeerd', `${message.author.tag} spamde berichten.`, [
+      { name: 'Kanaal', value: `${message.channel}`, inline: true }
+    ]);
+    return;
   }
 });
 
@@ -890,7 +1375,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
       for (const command of client.commands.values()) {
         if (typeof command.handleButton !== 'function') continue;
-
         const handled = await command.handleButton(interaction, context);
         if (handled) return;
       }
@@ -900,7 +1384,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
-
       await command.execute(interaction, context);
       return;
     }
@@ -908,7 +1391,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isStringSelectMenu()) {
       for (const command of client.commands.values()) {
         if (typeof command.handleComponent !== 'function') continue;
-
         const handled = await command.handleComponent(interaction, context);
         if (handled) return;
       }
@@ -918,7 +1400,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isModalSubmit()) {
       for (const command of client.commands.values()) {
         if (typeof command.handleModal !== 'function') continue;
-
         const handled = await command.handleModal(interaction, context);
         if (handled) return;
       }

@@ -27,71 +27,76 @@ module.exports = {
   RULES_CHANNEL_ID: '1501708362851684444',
   WARNING_CHANNEL_ID: '1501708362851684451',
   WEAPON_PRICE_CHANNEL_ID: '1501708363103211672',
-    
- STRIKE_ROLE_ID: '1501708361966817379',
- STRIKE_KEEP_ROLE_ID: '1501708361975070960',
-STRIKE_CHANNEL_ID: '1501708362851684449',
-    
-AFWEZIGHEID_SETTINGS: {
-  PUBLIC_CHANNEL_ID: '1501708363409653928',
-  OVERVIEW_CHANNEL_ID: '1504562319857025174',
-  LOG_CHANNEL_ID: '1503198584072441946',
-  AFWEZIG_ROLE_ID: '1504603623353483445',
-  CHECK_INTERVAL_MS: 60 * 1000,
-  REMINDER_BEFORE_END_MS: 60 * 60 * 1000,
-  NICKNAME_PREFIX: '[AFW]',
-  PUBLIC_MESSAGE_MARKER: 'vyrkazoz-afwezigheid-public',
-  OVERVIEW_MESSAGE_MARKER: 'vyrkazoz-afwezigheid-overview',
-},
 
+  STRIKE_ROLE_ID: '1501708361966817379',
+  STRIKE_KEEP_ROLE_ID: '1501708361975070960',
+  STRIKE_CHANNEL_ID: '1501708362851684449',
 
+  AFWEZIGHEID_SETTINGS: {
+    PUBLIC_CHANNEL_ID: '1501708363409653928',
+    OVERVIEW_CHANNEL_ID: '1504562319857025174',
+    LOG_CHANNEL_ID: '1503198584072441946',
+    AFWEZIG_ROLE_ID: '1504603623353483445',
+    CHECK_INTERVAL_MS: 60 * 1000,
+    REMINDER_BEFORE_END_MS: 60 * 60 * 1000,
+    NICKNAME_PREFIX: '[AFW]',
+    PUBLIC_MESSAGE_MARKER: 'vyrkazoz-afwezigheid-public',
+    OVERVIEW_MESSAGE_MARKER: 'vyrkazoz-afwezigheid-overview',
+  },
 
-ACTIVITY_SETTINGS: {
-  PANEL_CHANNEL_ID: '1504980366409076867',
-  STAFF_CHANNEL_ID: '1501708364537925779',
-  LOG_CHANNEL_ID: '1503198584072441946',
-  MINIMUM_ROLE_ID: '1501708361987522682',
-  KADER_ROLE_ID: '1501708361975070956',
-  SEMI_KADER_ROLE_ID: '1501708361975070955',
-  STAFF_ROLE_ID: '1498622875970703481',
-  CHECK_INTERVAL_MINUTES: 30,
-  CHECK_RESPONSE_MINUTES: 5,
-  WEEKLY_RESET_DAY: 1,
-},
-    
-    COMMAND_ROLE_ACCESS: {
-  '1501708361987522682': ['mijnafwezigheid', 'aanwezig', 'afwezigheid', 'suggestie'],
-  '1501708361975070955': ['aannemen', 'strike', 'activiteit-lid'],
-  '1501708361975070956': [
-    'ban', 'botstatus', 'clear', 'demote', 'embed-banner', 'embed-basic',
-    'embed-luxe', 'embed-send', 'inklokpanel', 'kick', 'klassement',
-    'ledenlijst', 'porto', 'promote', 'purge', 'regels-refresh',
-    'reset-activiteit-iedereen', 'reset-activiteit', 'rolewipe',
-    'suggestie-review', 'suggestie-stemmen', 'testautorole', 'ticket',
-    'timeout', 'uitklok-lid', 'waarschuwing', 'wpadd', 'wpdelete',
-    'wpedit', 'wprefresh'
-  ]
-},
+  ACTIVITY_SETTINGS: {
+    PANEL_CHANNEL_ID: '1504980366409076867',
+    STAFF_CHANNEL_ID: '1501708364537925779',
+    LOG_CHANNEL_ID: '1503198584072441946',
+    MINIMUM_ROLE_ID: '1501708361987522682',
+    KADER_ROLE_ID: '1501708361975070956',
+    SEMI_KADER_ROLE_ID: '1501708361975070955',
+    STAFF_ROLE_ID: '1498622875970703481',
+    CHECK_INTERVAL_MINUTES: 30,
+    CHECK_RESPONSE_MINUTES: 5,
+    WEEKLY_RESET_DAY: 1,
+  },
 
-ANTI_LINK: {
-  ENABLED: true,
-  BYPASS_ROLE_IDS: [
-    '1501708362000371751',
-    '1501708361975070956',
-    '1501708361975070955',
-  ],
-  ALLOWED_DOMAINS: [
-    'medal.tv',
-    'www.medal.tv',
-    'youtube.com',
-    'www.youtube.com',
-    'youtu.be',
-    'm.youtube.com',
-  ],
-  WHITELISTED_URLS: [
-    'rankzornl.nl',
-  ],
-},
+  COMMAND_ROLE_ACCESS: {
+    '1501708361987522682': ['mijnafwezigheid', 'aanwezig', 'afwezigheid', 'suggestie'],
+    '1501708361975070955': ['aannemen', 'strike', 'activiteit-lid'],
+    '1501708361975070956': [
+      'ban', 'botstatus', 'clear', 'demote', 'embed-banner', 'embed-basic',
+      'embed-luxe', 'embed-send', 'inklokpanel', 'kick', 'klassement',
+      'ledenlijst', 'porto', 'promote', 'purge', 'regels-refresh',
+      'reset-activiteit-iedereen', 'reset-activiteit', 'rolewipe',
+      'suggestie-review', 'suggestie-stemmen', 'testautorole', 'ticket',
+      'timeout', 'uitklok-lid', 'waarschuwing', 'wpadd', 'wpdelete',
+      'wpedit', 'wprefresh'
+    ]
+  },
+
+  // Anti-link systeem
+  ANTI_LINK: {
+    ENABLED: true,
+    BYPASS_ROLE_IDS: [
+      '1501708362000371751',
+      '1501708361975070956',
+      '1501708361975070955',
+    ],
+    ALLOWED_DOMAINS: [
+      'medal.tv',
+      'www.medal.tv',
+      'youtube.com',
+      'www.youtube.com',
+      'youtu.be',
+      'm.youtube.com',
+    ],
+    WHITELISTED_URLS: [
+      'rankzornl.nl',
+    ],
+  },
+
+  // Moderatie toggles (voor events/messageCreate.js compatibiliteit)
+  ANTI_TAG_ENABLED: true,
+  ANTI_SPAM_ENABLED: true,
+  ANTI_ALT_ENABLED: false,
+  ANTI_ALT_ROLE_ID: null,
 
   GANG_ROLE_IDS: ['1501708361987522682'],
 
@@ -101,17 +106,17 @@ ANTI_LINK: {
   EMBED_COLOR: 0x6B1016,
   EMBED_FOOTER: '© Vyrkazoz bot made with ❤️ by Lucas G & Milan G',
   EMBED_BANNER_URL: 'attachment://ledenlijst-banner.jpg',
-    
- SERVER_STATS: {
-  ENABLED: true,
-  CATEGORY_NAME: '📊 Vyrkazoz Stats 📊',
-  UPDATE_INTERVAL_MS: 5 * 60 * 1000,
-  CHANNELS: {
-    members: '『🫂』Leden : {count}',
-    boostLevel: '『🚀』Boost LVL : {count}',
-    tickets: '『🎟️』Tickets : {open} open | {closed} dicht',
+
+  SERVER_STATS: {
+    ENABLED: true,
+    CATEGORY_NAME: '📊 Vyrkazoz Stats 📊',
+    UPDATE_INTERVAL_MS: 5 * 60 * 1000,
+    CHANNELS: {
+      members: '』Leden : {count}',
+      boostLevel: '』Boost LVL : {count}',
+      tickets: '』Tickets : {open} open | {closed} dicht',
+    },
   },
-},
 
   LOG_CHANNELS: {
     messageEditDelete: '1501726624150720612',
@@ -141,42 +146,43 @@ ANTI_LINK: {
     ALLOW_CLOSE_FOR_EVERYONE: true,
   },
 
-TICKET_CATEGORIES: [
-  {
-    key: 'klacht',
-    label: '⛔ Klacht Melden',
-    description: 'Voor het indienen van een klacht',
-    channelSuffix: 'klacht',
-    supportRoleIds: ['1501708361975070956'],
-    questions: [
-      'Tegen wie is de klacht?',
-      'Wat is er gebeurd en waar?',
-      'Heb je bewijs?',
-    ],
-  },
-  {
-    key: 'samenwerking',
-    label: '🤝 Samenwerkingen',
-    description: 'Voor samenwerkingen',
-    channelSuffix: 'samenwerking',
-    supportRoleIds: ['1501708361975070956'],
-    questions: [
-      'Naam Gang',
-      'Naam eigenaar',
-      'Hoelang zijn jullie al in de stad',
-      'Waarom zouden we voor jullie kiezen',
-      'Hoe ziet u een samenwerking voor u',
-    ],
-  },
-  {
-    key: 'overige_vragen',
-    label: '❓ Overige Vragen',
-    description: 'Voor overige vragen',
-    channelSuffix: 'overige-vragen',
-    supportRoleIds: ['1501708361975070955', '1501708361975070956'],
-    questions: ['Wat is uw vraag?'],
-  },
-],
+  TICKET_CATEGORIES: [
+    {
+      key: 'klacht',
+      label: '⛔ Klacht Melden',
+      description: 'Voor het indienen van een klacht',
+      channelSuffix: 'klacht',
+      supportRoleIds: ['1501708361975070956'],
+      questions: [
+        'Tegen wie is de klacht?',
+        'Wat is er gebeurd en waar?',
+        'Heb je bewijs?',
+      ],
+    },
+    {
+      key: 'samenwerking',
+      label: '🤝 Samenwerkingen',
+      description: 'Voor samenwerkingen',
+      channelSuffix: 'samenwerking',
+      supportRoleIds: ['1501708361975070956'],
+      questions: [
+        'Naam Gang',
+        'Naam eigenaar',
+        'Hoelang zijn jullie al in de stad',
+        'Waarom zouden we voor jullie kiezen',
+        'Hoe ziet u een samenwerking voor u',
+      ],
+    },
+    {
+      key: 'overige_vragen',
+      label: '❓ Overige Vragen',
+      description: 'Voor overige vragen',
+      channelSuffix: 'overige-vragen',
+      supportRoleIds: ['1501708361975070955', '1501708361975070956'],
+      questions: ['Wat is uw vraag?'],
+    },
+  ],
+
   RANK_ROLES: [
     { name: '👑 | 𝑩𝒐𝒔𝒔', id: '1501708362000371748' },
     { name: '👑 | 𝑼𝒏𝒅𝒆𝒓 𝑩𝒐𝒔𝒔', id: '1501708362000371747' },

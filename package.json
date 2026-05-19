@@ -1,0 +1,22 @@
+{
+  "name": "vyrkazoz-bot",
+  "version": "1.0.0",
+  "description": "Discord bot voor Vyrkazoz",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy:commands": "node deploy.js",
+    "deploy": "npm ci && npm run deploy:commands",
+    "boot": "npm ci && npm run deploy:commands && node index.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:restart": "pm2 restart vyrkazoz-bot",
+    "pm2:reload": "pm2 reload vyrkazoz-bot"
+  },
+ "dependencies": {
+    "debug": "^4.3.7",
+    "discord-html-transcripts": "3.2.0",
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.5.0",
+    "mysql2": "^3.15.0"
+  }
+}
